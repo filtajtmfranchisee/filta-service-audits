@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import AuditForm from "./audit-form"
 
 const auditNames: Record<string, string> = {
@@ -17,6 +18,7 @@ export default async function AuditPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+
   const supabase = await createClient()
 
   const {
@@ -24,10 +26,43 @@ export default async function AuditPage({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/auth/login")
+    redirect("/")
   }
 
-  const { data: audit, error } = await supabase
+  const {
+    data: managementUser,
+    error: managementUserError,
+  } = await supabaseAdmin
+    .from("management_users")
+    .select(`
+      role,
+      is_active
+    `)
+    .eq("auth_user_id", user.id)
+    .maybeSingle()
+
+  if (
+    managementUserError ||
+    !managementUser ||
+    !managementUser.is_active
+  ) {
+    redirect("/")
+  }
+
+  const canEditAudit = [
+    "administrator",
+    "manager",
+    "auditor",
+  ].includes(managementUser.role)
+
+  if (!canEditAudit) {
+    redirect("/protected")
+  }
+
+  const {
+    data: audit,
+    error: auditError,
+  } = await supabase
     .from("audits")
     .select(`
       id,
@@ -42,19 +77,57 @@ export default async function AuditPage({
     .eq("id", id)
     .maybeSingle()
 
-  if (error || !audit) {
+  if (auditError || !audit) {
     notFound()
   }
 
-  const { data: savedResponses } = await supabase
-    .from("audit_responses")
-    .select(
-      "question_key, response_value, auditor_comment"
+  const [
+    responsesResult,
+    correctiveActionsResult,
+  ] = await Promise.all([
+    supabase
+      .from("audit_responses")
+      .select(`
+        question_key,
+        response_value,
+        auditor_comment
+      `)
+      .eq("audit_id", id),
+
+    supabase
+      .from("corrective_actions")
+      .select(`
+        question_key,
+        action_text,
+        owner_name,
+        due_date,
+        priority,
+        status
+      `)
+      .eq("audit_id", id),
+  ])
+
+  if (responsesResult.error) {
+    throw new Error(
+      responsesResult.error.message
     )
-    .eq("audit_id", id)
+  }
+
+  if (correctiveActionsResult.error) {
+    throw new Error(
+      correctiveActionsResult.error.message
+    )
+  }
+
+  const savedResponses =
+    responsesResult.data ?? []
+
+  const savedCorrectiveActions =
+    correctiveActionsResult.data ?? []
 
   const title =
-    auditNames[audit.audit_type] || "Service Audit"
+    auditNames[audit.audit_type] ||
+    "Service Audit"
 
   return (
     <main className="min-h-screen bg-slate-100">
@@ -77,12 +150,14 @@ export default async function AuditPage({
 
           <div className="mt-5 flex flex-wrap gap-3 text-sm">
             <span className="rounded-full bg-white/10 px-4 py-2">
-              Auditor: {audit.auditor_first_name}{" "}
+              Auditor:{" "}
+              {audit.auditor_first_name}{" "}
               {audit.auditor_last_name}
             </span>
 
             <span className="rounded-full bg-white/10 px-4 py-2">
-              Audit Date: {audit.audit_date}
+              Audit Date:{" "}
+              {audit.audit_date}
             </span>
 
             {audit.audit_type === "warehouse" &&
@@ -103,7 +178,7 @@ export default async function AuditPage({
           <AuditForm
             auditId={audit.id}
             auditType={audit.audit_type}
-            isManagementUser={!user.is_anonymous}
+            isManagementUser={true}
             initialStatus={audit.status}
             oilStorageSystem={
               audit.oil_storage_system || null
@@ -111,7 +186,10 @@ export default async function AuditPage({
             initialGeneralNotes={
               audit.general_notes || ""
             }
-            initialResponses={savedResponses || []}
+            initialResponses={savedResponses}
+            initialCorrectiveActions={
+              savedCorrectiveActions
+            }
           />
         </div>
       </div>

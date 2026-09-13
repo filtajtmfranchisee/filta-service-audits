@@ -2,6 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabaseAdmin"
 
 const auditTypes = [
   {
@@ -62,7 +63,34 @@ export default async function NewAuditPage() {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/auth/login")
+    redirect("/")
+  }
+
+  const {
+    data: managementUser,
+    error: managementUserError,
+  } = await supabaseAdmin
+    .from("management_users")
+    .select("role, is_active")
+    .eq("auth_user_id", user.id)
+    .maybeSingle()
+
+  if (
+    managementUserError ||
+    !managementUser ||
+    !managementUser.is_active
+  ) {
+    redirect("/")
+  }
+
+  const canStartAudit = [
+    "administrator",
+    "manager",
+    "auditor",
+  ].includes(managementUser.role)
+
+  if (!canStartAudit) {
+    redirect("/protected")
   }
 
   return (

@@ -1,16 +1,77 @@
+"use client"
+
+import { FormEvent, useState } from "react"
 import Image from "next/image"
-import Link from "next/link"
+import { useRouter } from "next/navigation"
+
+import { createClient } from "@/lib/supabase/client"
 
 export default function HomePage() {
+  const supabase = createClient()
+  const router = useRouter()
+
+  const [errorMessage, setErrorMessage] = useState("")
+  const [signingIn, setSigningIn] = useState(false)
+
+  async function handleLogin(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault()
+
+    setSigningIn(true)
+    setErrorMessage("")
+
+    const formData = new FormData(event.currentTarget)
+
+    const email = String(
+      formData.get("email") || ""
+    )
+      .trim()
+      .toLowerCase()
+
+    const password = String(
+      formData.get("password") || ""
+    )
+
+    try {
+      if (!email || !password) {
+        throw new Error(
+          "Email and password are required."
+        )
+      }
+
+      const { error } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+      if (error) {
+        throw error
+      }
+
+      router.push("/protected")
+      router.refresh()
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to sign in."
+      )
+    } finally {
+      setSigningIn(false)
+    }
+  }
+
   return (
     <main className="page">
-      <section className="accessCard">
-        <div className="brand">
+      <section className="loginCard">
+        <div className="header">
           <Image
             src="/filta-logo-clear.png"
             alt="Filta"
-            width={300}
-            height={110}
+            width={240}
+            height={90}
             className="logo"
             priority
           />
@@ -28,56 +89,61 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="accessOptions">
-          <article className="option serviceOption">
-            <div className="icon">
-              ✓
+        <div className="formArea">
+          {errorMessage && (
+            <div
+              className="errorMessage"
+              role="alert"
+            >
+              {errorMessage}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin}>
+            <label>
+              <span>Email Address</span>
+
+              <input
+                type="email"
+                name="email"
+                required
+                autoComplete="email"
+                placeholder="name@gofilta.com"
+                autoFocus
+              />
+            </label>
+
+            <label>
+              <span>Password</span>
+
+              <input
+                type="password"
+                name="password"
+                required
+                autoComplete="current-password"
+              />
+            </label>
+
+            <div className="forgotPassword">
+              <a href="/auth/forgot-password">
+                Forgot password?
+              </a>
             </div>
 
-            <div className="optionContent">
-              <h2>
-                Service Audit Login
-              </h2>
+            <button
+              type="submit"
+              disabled={signingIn}
+            >
+              {signingIn
+                ? "Signing In..."
+                : "Login"}
+            </button>
+          </form>
 
-              <p>
-                For authorized personnel completing equipment,
-                service-delivery, warehouse and vehicle audits.
-                Enter the audit-team passcode to begin.
-              </p>
-
-              <Link
-                className="primaryButton"
-                href="/service-audits"
-              >
-                Service Audit Login
-              </Link>
-            </div>
-          </article>
-
-          <article className="option managementOption">
-            <div className="icon">
-              ▦
-            </div>
-
-            <div className="optionContent">
-              <h2>
-                Management Login
-              </h2>
-
-              <p>
-                For authorized management users accessing audit
-                results, reports, trends, corrective actions and
-                administrative tools based on their assigned role.
-              </p>
-
-              <Link
-                className="secondaryButton"
-                href="/auth/login"
-              >
-                Management Login
-              </Link>
-            </div>
-          </article>
+          <p className="securityNote">
+            Your available tools will be based on your
+            assigned access level.
+          </p>
         </div>
 
         <footer>
@@ -95,7 +161,7 @@ export default function HomePage() {
           background:
             radial-gradient(
               circle at top left,
-              rgba(87, 187, 131, 0.16),
+              rgba(87, 187, 131, 0.15),
               transparent 36%
             ),
             #f1f5f9;
@@ -108,20 +174,20 @@ export default function HomePage() {
           min-height: 100vh;
           align-items: center;
           justify-content: center;
-          padding: 32px 20px;
+          padding: 28px 18px;
         }
 
-        .accessCard {
-          width: min(920px, 100%);
+        .loginCard {
+          width: min(540px, 100%);
           overflow: hidden;
           border: 1px solid #dbe2ea;
           border-radius: 24px;
           background: white;
-          box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+          box-shadow: 0 18px 45px rgba(15, 23, 42, 0.14);
         }
 
-        .brand {
-          padding: 38px 42px 42px;
+        .header {
+          padding: 38px 34px 36px;
           background: #10152c;
           color: white;
         }
@@ -129,175 +195,147 @@ export default function HomePage() {
         .logo {
           display: block;
           width: auto;
-          max-width: 260px;
+          max-width: 190px;
           height: auto;
-          max-height: 100px;
-          margin-bottom: 25px;
+          max-height: 75px;
+          margin-bottom: 26px;
           object-fit: contain;
         }
 
         .eyebrow {
-          margin: 0 0 12px;
+          margin: 0 0 10px;
           color: #58d49a;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 800;
           letter-spacing: 1.6px;
         }
 
         h1 {
-          max-width: 760px;
           margin: 0;
-          font-size: clamp(34px, 6vw, 52px);
+          font-size: 38px;
           line-height: 1.08;
         }
 
         .description {
-          margin: 18px 0 0;
+          margin: 14px 0 0;
           color: #dbe4ff;
-          font-size: 20px;
-          line-height: 1.5;
+          font-size: 18px;
         }
 
-        .accessOptions {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 20px;
-          padding: 30px;
-          background: #f8fafc;
+        .formArea {
+          padding: 34px;
         }
 
-        .option {
+        .errorMessage {
+          margin-bottom: 22px;
+          padding: 14px 16px;
+          border: 1px solid #f2b8b5;
+          border-radius: 10px;
+          background: #fff1f0;
+          color: #b42318;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        form {
           display: flex;
           flex-direction: column;
-          min-height: 330px;
-          padding: 28px;
-          border: 1px solid #dbe2ea;
-          border-radius: 18px;
-          background: white;
+          gap: 21px;
         }
 
-        .serviceOption {
-          border-top: 5px solid #57bb83;
-        }
-
-        .managementOption {
-          border-top: 5px solid #253453;
-        }
-
-        .icon {
-          display: flex;
-          width: 48px;
-          height: 48px;
-          align-items: center;
-          justify-content: center;
-          margin-bottom: 20px;
-          border-radius: 14px;
-          background: #e7f8ef;
-          color: #168554;
-          font-size: 24px;
-          font-weight: 900;
-        }
-
-        .managementOption .icon {
-          background: #e8ebf2;
-          color: #253453;
-        }
-
-        .optionContent {
-          display: flex;
-          flex: 1;
-          flex-direction: column;
-        }
-
-        h2 {
-          margin: 0;
-          font-size: 24px;
-        }
-
-        .option p {
-          flex: 1;
-          margin: 14px 0 24px;
-          color: #526078;
-          font-size: 16px;
-          line-height: 1.55;
-        }
-
-        .primaryButton,
-        .secondaryButton {
-          display: flex;
-          min-height: 50px;
-          align-items: center;
-          justify-content: center;
-          padding: 12px 20px;
-          border-radius: 11px;
-          font-size: 16px;
+        label span {
+          display: block;
+          margin-bottom: 8px;
+          font-size: 14px;
           font-weight: 800;
-          text-align: center;
-          text-decoration: none;
-          transition:
-            transform 120ms ease,
-            background 120ms ease,
-            color 120ms ease;
         }
 
-        .primaryButton {
+        input {
+          width: 100%;
+          min-height: 54px;
+          padding: 12px 16px;
+          border: 1px solid #cbd5e1;
+          border-radius: 11px;
+          background: white;
+          color: #10152c;
+          font-size: 16px;
+          outline: none;
+        }
+
+        input:focus {
+          border-color: #299665;
+          box-shadow:
+            0 0 0 4px
+            rgba(87, 187, 131, 0.18);
+        }
+
+        .forgotPassword {
+          margin-top: -10px;
+          text-align: right;
+        }
+
+        .forgotPassword a {
+          color: #168554;
+          font-size: 14px;
+          font-weight: 700;
+          text-decoration: none;
+        }
+
+        button {
+          width: 100%;
+          min-height: 52px;
+          padding: 12px 20px;
+          border: 0;
+          border-radius: 11px;
           background: #57bb83;
           color: white;
+          font-size: 16px;
+          font-weight: 800;
+          cursor: pointer;
         }
 
-        .primaryButton:hover {
+        button:hover {
           background: #46a972;
-          transform: translateY(-1px);
         }
 
-        .secondaryButton {
-          border: 1px solid #253453;
-          background: white;
-          color: #253453;
+        button:disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
         }
 
-        .secondaryButton:hover {
-          background: #253453;
-          color: white;
-          transform: translateY(-1px);
+        .securityNote {
+          margin: 24px 0 0;
+          color: #718096;
+          font-size: 13px;
+          line-height: 1.5;
+          text-align: center;
         }
 
         footer {
           padding: 18px 30px;
           border-top: 1px solid #e2e8f0;
-          background: white;
-          color: #718096;
-          font-size: 13px;
+          color: #8792a5;
+          font-size: 12px;
           text-align: center;
         }
 
-        @media (max-width: 720px) {
+        @media (max-width: 540px) {
           .page {
             align-items: flex-start;
-            padding: 16px 12px;
+            padding: 14px;
           }
 
-          .accessCard {
+          .loginCard {
             border-radius: 18px;
           }
 
-          .brand {
-            padding: 28px 24px 32px;
+          .header,
+          .formArea {
+            padding: 26px 22px;
           }
 
-          .logo {
-            max-width: 220px;
-            max-height: 85px;
-          }
-
-          .accessOptions {
-            grid-template-columns: 1fr;
-            padding: 20px;
-          }
-
-          .option {
-            min-height: 290px;
-            padding: 24px;
+          h1 {
+            font-size: 31px;
           }
         }
       `}</style>

@@ -2,13 +2,13 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 
-type AdminLayoutProps = {
+type ProtectedLayoutProps = {
   children: React.ReactNode
 }
 
-export default async function AdminLayout({
+export default async function ProtectedLayout({
   children,
-}: AdminLayoutProps) {
+}: ProtectedLayoutProps) {
   const supabase = await createClient()
 
   const {
@@ -16,11 +16,7 @@ export default async function AdminLayout({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/auth/login")
-  }
-
-  if (user.is_anonymous) {
-    redirect("/protected")
+    redirect("/")
   }
 
   return <>{children}</>

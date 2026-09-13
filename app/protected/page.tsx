@@ -8,12 +8,14 @@ import CorrectiveActionComplete from "./corrective-action-complete"
 
 type ManagementUser = {
   full_name: string | null
+  email: string
   role:
     | "administrator"
     | "manager"
     | "auditor"
     | "read_only"
   is_active: boolean
+  must_change_password: boolean
 }
 
 type CorrectiveAction = {
@@ -60,6 +62,24 @@ function todayEastern() {
   }).format(new Date())
 }
 
+function roleLabel(
+  role: ManagementUser["role"]
+) {
+  if (role === "administrator") {
+    return "Administrator"
+  }
+
+  if (role === "manager") {
+    return "Manager"
+  }
+
+  if (role === "auditor") {
+    return "Auditor"
+  }
+
+  return "Read Only"
+}
+
 export default async function ProtectedPage() {
   const supabase = await createClient()
 
@@ -71,41 +91,47 @@ export default async function ProtectedPage() {
     redirect("/")
   }
 
-  const isManagementLogin = !user.is_anonymous
+  const {
+    data: managementUserData,
+    error: managementUserError,
+  } = await supabaseAdmin
+    .from("management_users")
+    .select(`
+      full_name,
+      email,
+      role,
+      is_active,
+      must_change_password
+    `)
+    .eq("auth_user_id", user.id)
+    .maybeSingle()
 
-  let managementUser: ManagementUser | null = null
-
-  if (isManagementLogin) {
-    const {
-      data,
-      error,
-    } = await supabaseAdmin
-      .from("management_users")
-      .select(`
-        full_name,
-        role,
-        is_active
-      `)
-      .eq("auth_user_id", user.id)
-      .maybeSingle()
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    managementUser =
-      data as ManagementUser | null
-
-    if (
-      !managementUser ||
-      !managementUser.is_active
-    ) {
-      redirect("/")
-    }
+  if (managementUserError) {
+    throw new Error(
+      managementUserError.message
+    )
   }
 
-  const role =
-    managementUser?.role ?? null
+  if (
+    !managementUserData ||
+    !managementUserData.is_active
+  ) {
+    await supabase.auth.signOut()
+    redirect("/")
+  }
+
+  const managementUser =
+    managementUserData as ManagementUser
+
+  if (
+    managementUser.must_change_password
+  ) {
+    redirect(
+      "/protected/change-password"
+    )
+  }
+
+  const role = managementUser.role
 
   const isAdministrator =
     role === "administrator"
@@ -119,6 +145,11 @@ export default async function ProtectedPage() {
   const isReadOnly =
     role === "read_only"
 
+  const canStartAudit =
+    isAdministrator ||
+    isManager ||
+    isAuditor
+
   const canViewReports =
     isAdministrator ||
     isManager ||
@@ -129,8 +160,7 @@ export default async function ProtectedPage() {
     isAdministrator ||
     isManager
 
-  const canStartAudit =
-    !isManagementLogin ||
+  const canViewCorrectiveActions =
     isAdministrator ||
     isManager ||
     isAuditor
@@ -142,8 +172,8 @@ export default async function ProtectedPage() {
     new Map<string, Audit>()
 
   if (
-    isManagementLogin &&
-    managementUser?.full_name
+    canViewCorrectiveActions &&
+    managementUser.full_name
   ) {
     const {
       data: actionData,
@@ -166,7 +196,9 @@ export default async function ProtectedPage() {
       })
 
     if (actionError) {
-      throw new Error(actionError.message)
+      throw new Error(
+        actionError.message
+      )
     }
 
     const normalizedName =
@@ -189,7 +221,8 @@ export default async function ProtectedPage() {
       Array.from(
         new Set(
           myCorrectiveActions.map(
-            (action) => action.audit_id
+            (action) =>
+              action.audit_id
           )
         )
       )
@@ -224,8 +257,7 @@ export default async function ProtectedPage() {
     }
   }
 
-  const today =
-    todayEastern()
+  const today = todayEastern()
 
   const overdueCount =
     myCorrectiveActions.filter(
@@ -253,62 +285,178 @@ export default async function ProtectedPage() {
             DORADO ENVIRONMENTAL
           </p>
 
-          <h1>Service Audits</h1>
+          <h1>
+            Welcome,{" "}
+            {managementUser.full_name?.split(
+              " "
+            )[0] ||
+              "Team Member"}
+          </h1>
 
           <p className="description">
-            Equipment, service-delivery,
-            warehouse and vehicle inspections.
+            Dorado Service Audit System
           </p>
 
-          <p className="accessStatus">
-            {isManagementLogin
-              ? `${
-                  managementUser?.full_name ||
-                  user.email ||
-                  "Management User"
-                } · ${
-                  isAdministrator
-                    ? "Administrator"
-                    : isManager
-                      ? "Manager"
-                      : isAuditor
-                        ? "Auditor"
-                        : "Read Only"
-                }`
-              : "Service Audit passcode access"}
+          <div className="userStatus">
+            <span>
+              {managementUser.full_name ||
+                managementUser.email}
+            </span>
+
+            <span className="roleBadge">
+              {roleLabel(role)}
+            </span>
+          </div>
+        </section>
+
+        <section className="accessSection">
+          <p className="sectionEyebrow">
+            YOUR ACCESS
           </p>
 
-          <div className="heroActions">
+          <h2>Choose an Area</h2>
+
+          <div className="accessGrid">
             {canStartAudit && (
               <Link
-                className="primaryButton"
                 href="/protected/audits/new"
+                className="accessCard serviceAccess"
               >
-                Start New Audit
+                <span className="cardIcon">
+                  ✓
+                </span>
+
+                <div>
+                  <h3>
+                    Service Audits
+                  </h3>
+
+                  <p>
+                    Start equipment,
+                    service-delivery,
+                    warehouse and vehicle
+                    inspections.
+                  </p>
+                </div>
+
+                <strong>
+                  Open Service Audits →
+                </strong>
               </Link>
             )}
 
             {canViewReports && (
               <Link
-                className="reportButton"
                 href="/protected/audits"
+                className="accessCard"
               >
-                Reports
+                <span className="cardIcon">
+                  ▦
+                </span>
+
+                <div>
+                  <h3>
+                    Audit Results
+                  </h3>
+
+                  <p>
+                    Review completed audits,
+                    scores, findings and
+                    historical results.
+                  </p>
+                </div>
+
+                <strong>
+                  Open Reports →
+                </strong>
+              </Link>
+            )}
+
+            {canViewReports && (
+              <Link
+                href="/protected/admin/trends"
+                className="accessCard"
+              >
+                <span className="cardIcon">
+                  ↗
+                </span>
+
+                <div>
+                  <h3>
+                    Score Trends
+                  </h3>
+
+                  <p>
+                    Review performance trends
+                    across technicians,
+                    equipment and audit types.
+                  </p>
+                </div>
+
+                <strong>
+                  View Trends →
+                </strong>
               </Link>
             )}
 
             {canUseAdministration && (
               <Link
-                className="adminButton"
                 href="/protected/admin"
+                className="accessCard managementAccess"
               >
-                Administration
+                <span className="cardIcon">
+                  ⚙
+                </span>
+
+                <div>
+                  <h3>
+                    Management
+                  </h3>
+
+                  <p>
+                    Manage technicians,
+                    equipment, vehicles,
+                    warehouses and operating
+                    setup.
+                  </p>
+                </div>
+
+                <strong>
+                  Open Management →
+                </strong>
+              </Link>
+            )}
+
+            {canUseAdministration && (
+              <Link
+                href="/protected/admin/corrective-actions"
+                className="accessCard"
+              >
+                <span className="cardIcon">
+                  !
+                </span>
+
+                <div>
+                  <h3>
+                    Corrective Actions
+                  </h3>
+
+                  <p>
+                    Review open findings,
+                    assignments, due dates and
+                    completed corrective work.
+                  </p>
+                </div>
+
+                <strong>
+                  Manage Actions →
+                </strong>
               </Link>
             )}
           </div>
         </section>
 
-        {isManagementLogin && (
+        {canViewCorrectiveActions && (
           <section className="correctiveSection">
             <div className="correctiveHeader">
               <div>
@@ -333,6 +481,7 @@ export default async function ProtectedPage() {
                       myCorrectiveActions.length
                     }
                   </strong>
+
                   <span>Open</span>
                 </div>
 
@@ -346,6 +495,7 @@ export default async function ProtectedPage() {
                   <strong>
                     {overdueCount}
                   </strong>
+
                   <span>Overdue</span>
                 </div>
               </div>
@@ -446,9 +596,7 @@ export default async function ProtectedPage() {
                         </div>
 
                         <CorrectiveActionComplete
-                          actionId={
-                            action.id
-                          }
+                          actionId={action.id}
                         />
                       </article>
                     )
@@ -459,112 +607,15 @@ export default async function ProtectedPage() {
           </section>
         )}
 
-        {canViewReports ? (
-          <section className="managementSection">
-            <div className="sectionHeading">
-              <div>
-                <p className="sectionEyebrow">
-                  MANAGEMENT CENTER
-                </p>
-
-                <h2>
-                  Review and Manage
-                </h2>
-              </div>
-            </div>
-
-            <div
-              className={`managementGrid ${
-                !canUseAdministration
-                  ? "singleManagementCard"
-                  : ""
-              }`}
-            >
-              <Link
-                className="managementCard"
-                href="/protected/audits"
-              >
-                <span className="cardIcon">
-                  ▦
-                </span>
-
-                <div>
-                  <h3>
-                    Audit Results and Reports
-                  </h3>
-
-                  <p>
-                    Review audit grades,
-                    findings, corrective actions
-                    and historical results.
-                  </p>
-                </div>
-
-                <strong>
-                  Open Reports →
-                </strong>
-              </Link>
-
-              {canUseAdministration && (
-                <Link
-                  className="managementCard"
-                  href="/protected/admin"
-                >
-                  <span className="cardIcon">
-                    ⚙
-                  </span>
-
-                  <div>
-                    <h3>
-                      Administration
-                    </h3>
-
-                    <p>
-                      Manage technicians,
-                      equipment, vehicles and
-                      warehouse locations.
-                    </p>
-                  </div>
-
-                  <strong>
-                    Open Administration →
-                  </strong>
-                </Link>
-              )}
-            </div>
-          </section>
-        ) : (
-          <section className="entryNotice">
-            <h2>
-              Audit Entry Access
-            </h2>
-
-            <p>
-              You may begin and complete a
-              new audit. Management reports
-              and administrative information
-              require a management login.
-            </p>
-
-            <Link href="/">
-              Return to Main Access
-            </Link>
-          </section>
-        )}
-
         {canStartAudit && (
           <section className="auditSection">
-            <div className="sectionHeading">
-              <div>
-                <p className="sectionEyebrow">
-                  INSPECTION AREAS
-                </p>
+            <p className="sectionEyebrow">
+              SERVICE AUDITS
+            </p>
 
-                <h2>
-                  Service Audit Types
-                </h2>
-              </div>
-            </div>
+            <h2>
+              Start a Specific Audit
+            </h2>
 
             <div className="auditGrid">
               <Link
@@ -675,7 +726,9 @@ export default async function ProtectedPage() {
           border-radius: 22px;
           background: #10152c;
           color: white;
-          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+          box-shadow:
+            0 12px 28px
+            rgba(15, 23, 42, 0.16);
         }
 
         .logo {
@@ -699,7 +752,8 @@ export default async function ProtectedPage() {
 
         .hero h1 {
           margin: 0;
-          font-size: clamp(36px, 6vw, 50px);
+          font-size:
+            clamp(36px, 6vw, 50px);
           line-height: 1.05;
         }
 
@@ -707,60 +761,104 @@ export default async function ProtectedPage() {
           margin: 14px 0 0;
           color: #dbe4ff;
           font-size: 17px;
-          line-height: 1.5;
         }
 
-        .accessStatus {
-          margin: 24px 0 0;
-          color: #aab7d4;
+        .userStatus {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px;
+          margin-top: 22px;
+          color: #cbd5e1;
           font-size: 14px;
         }
 
-        .heroActions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-          margin-top: 24px;
-        }
-
-        .primaryButton,
-        .reportButton,
-        .adminButton {
-          display: inline-flex;
-          min-height: 48px;
-          align-items: center;
-          justify-content: center;
-          padding: 12px 20px;
-          border-radius: 10px;
-          font-size: 15px;
+        .roleBadge {
+          padding: 6px 10px;
+          border-radius: 999px;
+          background:
+            rgba(88, 212, 154, 0.14);
+          color: #58d49a;
+          font-size: 12px;
           font-weight: 800;
-          text-decoration: none;
         }
 
-        .primaryButton {
-          background: #57bb83;
-          color: white;
-        }
-
-        .primaryButton:hover {
-          background: #46a972;
-        }
-
-        .reportButton {
-          background: white;
-          color: #10152c;
-        }
-
-        .adminButton {
-          border: 1px solid #71809f;
-          background: transparent;
-          color: white;
-        }
-
+        .accessSection,
         .correctiveSection,
-        .managementSection,
         .auditSection {
           margin-top: 28px;
+        }
+
+        .accessSection > h2,
+        .auditSection > h2 {
+          margin: 0 0 16px;
+          font-size: 28px;
+        }
+
+        .accessGrid {
+          display: grid;
+          grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+          gap: 18px;
+        }
+
+        .accessCard {
+          display: flex;
+          min-height: 245px;
+          flex-direction: column;
+          padding: 25px;
+          border: 1px solid #dbe2ea;
+          border-top: 5px solid #253453;
+          border-radius: 16px;
+          background: white;
+          color: #10152c;
+          text-decoration: none;
+          box-shadow:
+            0 3px 9px
+            rgba(15, 23, 42, 0.05);
+        }
+
+        .serviceAccess {
+          border-top-color: #57bb83;
+        }
+
+        .managementAccess {
+          border-top-color: #57bb83;
+        }
+
+        .cardIcon {
+          display: flex;
+          width: 46px;
+          height: 46px;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 18px;
+          border-radius: 13px;
+          background: #e7f8ef;
+          color: #168554;
+          font-size: 21px;
+          font-weight: 900;
+        }
+
+        .accessCard > div {
+          flex: 1;
+        }
+
+        .accessCard h3 {
+          margin: 0;
+          font-size: 21px;
+        }
+
+        .accessCard p {
+          margin: 11px 0 20px;
+          color: #526078;
+          font-size: 15px;
+          line-height: 1.55;
+        }
+
+        .accessCard strong {
+          color: #168554;
+          font-size: 14px;
         }
 
         .correctiveSection {
@@ -768,12 +866,15 @@ export default async function ProtectedPage() {
           border: 1px solid #dbe2ea;
           border-radius: 18px;
           background: white;
-          box-shadow: 0 3px 9px rgba(15, 23, 42, 0.05);
+          box-shadow:
+            0 3px 9px
+            rgba(15, 23, 42, 0.05);
         }
 
         .correctiveHeader {
           display: flex;
-          justify-content: space-between;
+          justify-content:
+            space-between;
           gap: 20px;
         }
 
@@ -827,7 +928,7 @@ export default async function ProtectedPage() {
           padding: 20px;
           border: 1px solid #e2e8f0;
           border-radius: 14px;
-          background: #fff;
+          background: white;
         }
 
         .correctiveCardOverdue {
@@ -837,7 +938,8 @@ export default async function ProtectedPage() {
 
         .correctiveTop {
           display: flex;
-          justify-content: space-between;
+          justify-content:
+            space-between;
           gap: 20px;
         }
 
@@ -910,30 +1012,16 @@ export default async function ProtectedPage() {
           color: #64748b;
         }
 
-        .sectionHeading {
-          margin-bottom: 15px;
-        }
-
-        .sectionHeading h2 {
-          margin: 0;
-          font-size: 27px;
-        }
-
-        .managementGrid,
         .auditGrid {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns:
+            repeat(2, minmax(0, 1fr));
           gap: 18px;
         }
 
-        .singleManagementCard {
-          grid-template-columns: minmax(0, 1fr);
-          max-width: 530px;
-        }
-
-        .managementCard,
         .auditCard {
           display: flex;
+          min-height: 190px;
           flex-direction: column;
           padding: 25px;
           border: 1px solid #dbe2ea;
@@ -941,79 +1029,41 @@ export default async function ProtectedPage() {
           background: white;
           color: #10152c;
           text-decoration: none;
-          box-shadow: 0 3px 9px rgba(15, 23, 42, 0.05);
+          box-shadow:
+            0 3px 9px
+            rgba(15, 23, 42, 0.05);
         }
 
-        .managementCard {
-          min-height: 240px;
-          border-top: 5px solid #57bb83;
-        }
-
-        .cardIcon {
-          display: flex;
-          width: 46px;
-          height: 46px;
-          align-items: center;
-          justify-content: center;
-          margin-bottom: 18px;
-          border-radius: 13px;
-          background: #e7f8ef;
-          color: #168554;
-          font-size: 21px;
-          font-weight: 900;
-        }
-
-        .managementCard div {
-          flex: 1;
-        }
-
-        .managementCard h3,
         .auditCard h3 {
           margin: 0;
           font-size: 21px;
         }
 
-        .managementCard p,
         .auditCard p {
+          flex: 1;
           margin: 11px 0 20px;
           color: #526078;
           font-size: 15px;
           line-height: 1.55;
         }
 
-        .managementCard strong,
         .auditCard span {
           color: #168554;
           font-size: 14px;
           font-weight: 800;
         }
 
-        .auditCard {
-          min-height: 190px;
-        }
-
-        .auditCard p {
-          flex: 1;
-        }
-
-        .entryNotice {
-          margin-top: 25px;
-          padding: 24px;
-          border: 1px solid #ccebd9;
-          border-radius: 16px;
-          background: #f0fbf5;
-        }
-
         @media (max-width: 720px) {
           .page {
-            padding: 18px 12px 50px;
+            padding:
+              18px 12px 50px;
           }
 
           .hero {
             padding: 26px 22px;
           }
 
-          .managementGrid,
+          .accessGrid,
           .auditGrid {
             grid-template-columns: 1fr;
           }
@@ -1037,10 +1087,6 @@ export default async function ProtectedPage() {
 
           .logo {
             max-width: 200px;
-          }
-
-          .heroActions a {
-            width: 100%;
           }
         }
       `}</style>

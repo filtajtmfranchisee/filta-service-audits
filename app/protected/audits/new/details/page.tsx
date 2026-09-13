@@ -3,6 +3,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import QuickEntryFields from "./quick-entry-fields"
 
 type AuditType =
@@ -10,6 +11,16 @@ type AuditType =
   | "service_delivery"
   | "warehouse"
   | "vehicle"
+
+type ManagementUser = {
+  full_name: string | null
+  role:
+    | "administrator"
+    | "manager"
+    | "auditor"
+    | "read_only"
+  is_active: boolean
+}
 
 const auditNames: Record<AuditType, string> = {
   equipment: "MFU/MBU Equipment Audit",
@@ -53,7 +64,8 @@ function getEasternDate() {
 }
 
 function allowedStorageSystems(locationName: string) {
-  const normalizedName = locationName.toLowerCase()
+  const normalizedName =
+    locationName.toLowerCase()
 
   if (normalizedName.includes("roselle")) {
     return ["1K", "6K"]
@@ -70,10 +82,66 @@ function allowedStorageSystems(locationName: string) {
   return []
 }
 
+async function requireAuditEntryUser() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/")
+  }
+
+  const {
+    data: managementUser,
+    error,
+  } = await supabaseAdmin
+    .from("management_users")
+    .select(`
+      full_name,
+      role,
+      is_active
+    `)
+    .eq("auth_user_id", user.id)
+    .maybeSingle()
+
+  if (
+    error ||
+    !managementUser ||
+    !managementUser.is_active
+  ) {
+    redirect("/")
+  }
+
+  const allowedRoles = [
+    "administrator",
+    "manager",
+    "auditor",
+  ]
+
+  if (
+    !allowedRoles.includes(
+      managementUser.role
+    )
+  ) {
+    redirect("/protected")
+  }
+
+  return {
+    supabase,
+    user,
+    managementUser:
+      managementUser as ManagementUser,
+  }
+}
+
 export default async function AuditDetailsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>
+  searchParams: Promise<{
+    type?: string
+  }>
 }) {
   const parameters = await searchParams
   const requestedType = parameters.type
@@ -83,15 +151,11 @@ export default async function AuditDetailsPage({
   }
 
   const auditType = requestedType
-  const supabase = await createClient()
 
   const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect("/service-audits")
-  }
+    supabase,
+    managementUser,
+  } = await requireAuditEntryUser()
 
   const [
     locationResult,
@@ -107,7 +171,11 @@ export default async function AuditDetailsPage({
     auditType === "service_delivery"
       ? supabase
           .from("technicians")
-          .select("id, first_name, last_name")
+          .select(`
+            id,
+            first_name,
+            last_name
+          `)
           .eq("active", true)
           .order("last_name")
           .order("first_name")
@@ -120,9 +188,12 @@ export default async function AuditDetailsPage({
     auditType === "vehicle"
       ? supabase
           .from("assets")
-          .select(
-            "id, asset_type, asset_number, description"
-          )
+          .select(`
+            id,
+            asset_type,
+            asset_number,
+            description
+          `)
           .eq("status", "active")
           .order("asset_type")
           .order("asset_number")
@@ -132,97 +203,175 @@ export default async function AuditDetailsPage({
         }),
   ])
 
-  const locations = locationResult.data ?? []
-  const technicians = technicianResult.data ?? []
-  const allAssets = assetResult.data ?? []
+  if (locationResult.error) {
+    throw new Error(
+      locationResult.error.message
+    )
+  }
 
-  const assets = allAssets.filter((asset) => {
-    if (auditType === "equipment") {
-      return ["MFU", "MBU", "VAC", "OTHER"].includes(
-        asset.asset_type
-      )
+  if (technicianResult.error) {
+    throw new Error(
+      technicianResult.error.message
+    )
+  }
+
+  if (assetResult.error) {
+    throw new Error(
+      assetResult.error.message
+    )
+  }
+
+  const locations =
+    locationResult.data ?? []
+
+  const technicians =
+    technicianResult.data ?? []
+
+  const allAssets =
+    assetResult.data ?? []
+
+  const assets = allAssets.filter(
+    (asset) => {
+      if (auditType === "equipment") {
+        return [
+          "MFU",
+          "MBU",
+          "VAC",
+          "OTHER",
+        ].includes(asset.asset_type)
+      }
+
+      if (auditType === "vehicle") {
+        return [
+          "VAN",
+          "TRUCK",
+        ].includes(asset.asset_type)
+      }
+
+      return false
     }
+  )
 
-    if (auditType === "vehicle") {
-      return ["VAN", "TRUCK"].includes(
-        asset.asset_type
-      )
-    }
+  const auditorNameParts =
+    (
+      managementUser.full_name || ""
+    )
+      .trim()
+      .split(/\s+/)
 
-    return false
-  })
+  const defaultFirstName =
+    auditorNameParts[0] || ""
 
-  async function createAudit(formData: FormData) {
+  const defaultLastName =
+    auditorNameParts
+      .slice(1)
+      .join(" ")
+
+  async function createAudit(
+    formData: FormData
+  ) {
     "use server"
 
-    const supabase = await createClient()
-
     const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      redirect("/service-audits")
-    }
+      supabase,
+      user,
+    } = await requireAuditEntryUser()
 
     const auditTypeValue = String(
       formData.get("audit_type") || ""
     )
 
-    if (!isAuditType(auditTypeValue)) {
+    if (
+      !isAuditType(
+        auditTypeValue
+      )
+    ) {
       throw new Error(
         "A valid audit type is required."
       )
     }
 
-    const auditorFirstName = String(
-      formData.get("auditor_first_name") || ""
-    ).trim()
+    const auditorFirstName =
+      String(
+        formData.get(
+          "auditor_first_name"
+        ) || ""
+      ).trim()
 
-    const auditorLastName = String(
-      formData.get("auditor_last_name") || ""
-    ).trim()
+    const auditorLastName =
+      String(
+        formData.get(
+          "auditor_last_name"
+        ) || ""
+      ).trim()
 
-    if (!auditorFirstName || !auditorLastName) {
+    if (
+      !auditorFirstName ||
+      !auditorLastName
+    ) {
       throw new Error(
         "The auditor’s first and last name are required."
       )
     }
 
-    const auditDate = String(
-      formData.get("audit_date") || ""
-    )
+    const auditDate =
+      String(
+        formData.get(
+          "audit_date"
+        ) || ""
+      )
 
     if (!auditDate) {
-      throw new Error("The audit date is required.")
+      throw new Error(
+        "The audit date is required."
+      )
     }
 
-    const submittedTechnicianId = String(
-      formData.get("technician_id") || ""
-    )
+    const submittedTechnicianId =
+      String(
+        formData.get(
+          "technician_id"
+        ) || ""
+      )
 
-    const submittedLocationId = String(
-      formData.get("location_id") || ""
-    )
+    const submittedLocationId =
+      String(
+        formData.get(
+          "location_id"
+        ) || ""
+      )
 
-    const submittedAssetId = String(
-      formData.get("asset_id") || ""
-    )
+    const submittedAssetId =
+      String(
+        formData.get(
+          "asset_id"
+        ) || ""
+      )
 
-    const oilStorageSystem = String(
-      formData.get("oil_storage_system") || ""
-    )
+    const oilStorageSystem =
+      String(
+        formData.get(
+          "oil_storage_system"
+        ) || ""
+      )
 
-    const customerLocation = String(
-      formData.get("customer_location") || ""
-    ).trim()
+    const customerLocation =
+      String(
+        formData.get(
+          "customer_location"
+        ) || ""
+      ).trim()
 
-    const startingNotes = String(
-      formData.get("starting_notes") || ""
-    ).trim()
+    const startingNotes =
+      String(
+        formData.get(
+          "starting_notes"
+        ) || ""
+      ).trim()
 
     if (
-      auditTypeValue === "service_delivery" &&
+      auditTypeValue ===
+        "service_delivery" &&
       !submittedTechnicianId
     ) {
       throw new Error(
@@ -231,7 +380,8 @@ export default async function AuditDetailsPage({
     }
 
     if (
-      auditTypeValue === "service_delivery" &&
+      auditTypeValue ===
+        "service_delivery" &&
       !customerLocation
     ) {
       throw new Error(
@@ -240,7 +390,8 @@ export default async function AuditDetailsPage({
     }
 
     if (
-      auditTypeValue === "warehouse" &&
+      auditTypeValue ===
+        "warehouse" &&
       !submittedLocationId
     ) {
       throw new Error(
@@ -249,8 +400,11 @@ export default async function AuditDetailsPage({
     }
 
     if (
-      auditTypeValue === "warehouse" &&
-      !["1K", "6K"].includes(oilStorageSystem)
+      auditTypeValue ===
+        "warehouse" &&
+      !["1K", "6K"].includes(
+        oilStorageSystem
+      )
     ) {
       throw new Error(
         "A valid oil storage system is required."
@@ -258,26 +412,41 @@ export default async function AuditDetailsPage({
     }
 
     if (
-      auditTypeValue === "warehouse" &&
+      auditTypeValue ===
+        "warehouse" &&
       submittedLocationId
     ) {
-      const { data: selectedLocation, error } =
-        await supabase
-          .from("locations")
-          .select("name")
-          .eq("id", submittedLocationId)
-          .single()
+      const {
+        data: selectedLocation,
+        error,
+      } = await supabase
+        .from("locations")
+        .select("name")
+        .eq(
+          "id",
+          submittedLocationId
+        )
+        .single()
 
-      if (error || !selectedLocation) {
+      if (
+        error ||
+        !selectedLocation
+      ) {
         throw new Error(
           "The selected warehouse could not be verified."
         )
       }
 
       const permittedSystems =
-        allowedStorageSystems(selectedLocation.name)
+        allowedStorageSystems(
+          selectedLocation.name
+        )
 
-      if (!permittedSystems.includes(oilStorageSystem)) {
+      if (
+        !permittedSystems.includes(
+          oilStorageSystem
+        )
+      ) {
         throw new Error(
           `${oilStorageSystem} is not available at ${selectedLocation.name}.`
         )
@@ -285,7 +454,8 @@ export default async function AuditDetailsPage({
     }
 
     const technicianId =
-      auditTypeValue === "service_delivery"
+      auditTypeValue ===
+      "service_delivery"
         ? submittedTechnicianId
         : null
 
@@ -295,8 +465,10 @@ export default async function AuditDetailsPage({
         : null
 
     const assetId =
-      auditTypeValue === "equipment" ||
-      auditTypeValue === "vehicle"
+      auditTypeValue ===
+        "equipment" ||
+      auditTypeValue ===
+        "vehicle"
         ? submittedAssetId || null
         : null
 
@@ -314,7 +486,10 @@ export default async function AuditDetailsPage({
       .filter(Boolean)
       .join("\n\n")
 
-    const { data: audit, error } = await supabase
+    const {
+      data: audit,
+      error,
+    } = await supabase
       .from("audits")
       .insert({
         template_id: null,
@@ -323,25 +498,34 @@ export default async function AuditDetailsPage({
         technician_id: technicianId,
         asset_id: assetId,
         auditor_id: user.id,
-        auditor_first_name: auditorFirstName,
-        auditor_last_name: auditorLastName,
+        auditor_first_name:
+          auditorFirstName,
+        auditor_last_name:
+          auditorLastName,
         audit_type: auditTypeValue,
         audit_date: auditDate,
         status: "draft",
-        general_notes: combinedNotes || null,
-        oil_storage_system: savedOilStorageSystem,
+        general_notes:
+          combinedNotes || null,
+        oil_storage_system:
+          savedOilStorageSystem,
       })
       .select("id")
       .single()
 
-    if (error || !audit) {
+    if (
+      error ||
+      !audit
+    ) {
       throw new Error(
         error?.message ||
           "The audit could not be created."
       )
     }
 
-    redirect(`/protected/audits/${audit.id}`)
+    redirect(
+      `/protected/audits/${audit.id}`
+    )
   }
 
   return (
@@ -383,6 +567,9 @@ export default async function AuditDetailsPage({
                 <input
                   type="text"
                   name="auditor_first_name"
+                  defaultValue={
+                    defaultFirstName
+                  }
                   required
                   autoComplete="given-name"
                   placeholder="First name"
@@ -394,6 +581,9 @@ export default async function AuditDetailsPage({
                 <input
                   type="text"
                   name="auditor_last_name"
+                  defaultValue={
+                    defaultLastName
+                  }
                   required
                   autoComplete="family-name"
                   placeholder="Last name"
@@ -406,7 +596,9 @@ export default async function AuditDetailsPage({
               <input
                 type="date"
                 name="audit_date"
-                defaultValue={getEasternDate()}
+                defaultValue={
+                  getEasternDate()
+                }
                 required
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900"
               />
@@ -414,12 +606,15 @@ export default async function AuditDetailsPage({
 
             <QuickEntryFields
               auditType={auditType}
-              initialTechnicians={technicians}
+              initialTechnicians={
+                technicians
+              }
               initialAssets={assets}
               locations={locations}
             />
 
-            {auditType === "service_delivery" && (
+            {auditType ===
+              "service_delivery" && (
               <FormField label="Customer or Service Location">
                 <input
                   type="text"
