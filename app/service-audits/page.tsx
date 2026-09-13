@@ -1,55 +1,118 @@
+"use client"
+
+import { FormEvent, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { redirect } from "next/navigation"
+import { useRouter } from "next/navigation"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/client"
 
-type PageProps = {
-  searchParams: Promise<{
-    error?: string
-  }>
-}
+export default function ServiceAuditsAccessPage() {
+  const supabase = createClient()
+  const router = useRouter()
 
-async function enterServiceAudits(formData: FormData) {
-  "use server"
+  const [errorMessage, setErrorMessage] = useState("")
+  const [signingIn, setSigningIn] = useState(false)
 
-  const submittedPasscode = String(
-    formData.get("passcode") ?? ""
-  ).trim()
+  async function handleLogin(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault()
 
-  const correctPasscode =
-    process.env.AUDIT_ENTRY_PASSCODE ?? "0414"
+    setSigningIn(true)
+    setErrorMessage("")
 
-  if (submittedPasscode !== correctPasscode) {
-    redirect(
-      "/service-audits?error=The passcode entered was incorrect."
+    const formData = new FormData(event.currentTarget)
+
+    const email = String(
+      formData.get("email") || ""
     )
-  }
+      .trim()
+      .toLowerCase()
 
-  const supabase = await createClient()
-
-  const { error } = await supabase.auth.signInAnonymously()
-
-  if (error) {
-    console.error("Anonymous audit access error:", error)
-
-    redirect(
-      `/service-audits?error=${encodeURIComponent(
-        "Service Audit access could not be started. Please contact a manager."
-      )}`
+    const password = String(
+      formData.get("password") || ""
     )
+
+    try {
+      if (!email || !password) {
+        throw new Error(
+          "Email and password are required."
+        )
+      }
+
+      const { data, error } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+      if (error) {
+        throw error
+      }
+
+      if (!data.user) {
+        throw new Error(
+          "Unable to verify your account."
+        )
+      }
+
+      const { data: managementUser, error: roleError } =
+        await supabase
+          .from("management_users")
+          .select("role, is_active")
+          .eq("auth_user_id", data.user.id)
+          .maybeSingle()
+
+      if (roleError) {
+        await supabase.auth.signOut()
+
+        throw new Error(
+          "Your Service Audit access could not be verified."
+        )
+      }
+
+      if (
+        !managementUser ||
+        !managementUser.is_active
+      ) {
+        await supabase.auth.signOut()
+
+        throw new Error(
+          "Your account is not active."
+        )
+      }
+
+      const allowedRoles = [
+        "administrator",
+        "manager",
+        "auditor",
+      ]
+
+      if (
+        !allowedRoles.includes(
+          managementUser.role
+        )
+      ) {
+        await supabase.auth.signOut()
+
+        throw new Error(
+          "Your account does not have Service Audit access."
+        )
+      }
+
+      router.push("/protected/audits/new")
+      router.refresh()
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to sign in."
+      )
+    } finally {
+      setSigningIn(false)
+    }
   }
-
-  redirect("/protected/audits/new")
-}
-
-export default async function ServiceAuditsAccessPage({
-  searchParams,
-}: PageProps) {
-  const params = await searchParams
-  const errorMessage = params.error
-    ? decodeURIComponent(params.error)
-    : ""
 
   return (
     <main className="page">
@@ -67,46 +130,70 @@ export default async function ServiceAuditsAccessPage({
           priority
         />
 
-        <p className="eyebrow">DORADO ENVIRONMENTAL</p>
-        <h1>Service Audits</h1>
-
-        <p className="description">
-          Enter the audit-team passcode to begin an equipment,
-          service-delivery, warehouse or vehicle inspection.
+        <p className="eyebrow">
+          DORADO ENVIRONMENTAL
         </p>
 
-        {errorMessage ? (
-          <div className="errorMessage" role="alert">
+        <h1>Service Audit Login</h1>
+
+        <p className="description">
+          Sign in to begin an equipment,
+          service-delivery, warehouse or vehicle audit.
+        </p>
+
+        {errorMessage && (
+          <div
+            className="errorMessage"
+            role="alert"
+          >
             {errorMessage}
           </div>
-        ) : null}
+        )}
 
-        <form action={enterServiceAudits}>
+        <form onSubmit={handleLogin}>
           <div className="field">
-            <label htmlFor="passcode">Audit Passcode</label>
+            <label htmlFor="email">
+              Email Address
+            </label>
 
             <input
-              id="passcode"
-              name="passcode"
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]{4}"
-              minLength={4}
-              maxLength={4}
-              autoComplete="off"
-              placeholder="Enter four-digit passcode"
-              aria-describedby="passcodeHelp"
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="name@gofilta.com"
               required
               autoFocus
             />
-
-            <p id="passcodeHelp" className="fieldHelp">
-              Enter the four-digit Dorado audit-team passcode.
-            </p>
           </div>
 
-          <button type="submit">
-            Enter Service Audits
+          <div className="field">
+            <label htmlFor="password">
+              Password
+            </label>
+
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+            />
+
+            <div className="forgotPassword">
+              <Link href="/auth/forgot-password">
+                Forgot password?
+              </Link>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={signingIn}
+          >
+            {signingIn
+              ? "Signing In..."
+              : "Enter Service Audits"}
           </button>
         </form>
 
@@ -174,10 +261,6 @@ export default async function ServiceAuditsAccessPage({
           height: auto;
           max-height: 90px;
           margin-bottom: 24px;
-          padding: 0;
-          border: 0;
-          border-radius: 0;
-          background: transparent;
           object-fit: contain;
         }
 
@@ -217,7 +300,7 @@ export default async function ServiceAuditsAccessPage({
         form {
           display: flex;
           flex-direction: column;
-          gap: 22px;
+          gap: 20px;
         }
 
         .field {
@@ -233,16 +316,13 @@ export default async function ServiceAuditsAccessPage({
 
         input {
           width: 100%;
-          min-height: 58px;
+          min-height: 54px;
           padding: 12px 16px;
-          border: 2px solid #1f2937;
+          border: 1px solid #cbd5e1;
           border-radius: 11px;
           background: white;
           color: #10152c;
-          font-size: 21px;
-          font-weight: 700;
-          letter-spacing: 7px;
-          text-align: center;
+          font-size: 16px;
           outline: none;
         }
 
@@ -251,17 +331,16 @@ export default async function ServiceAuditsAccessPage({
           box-shadow: 0 0 0 4px rgba(87, 187, 131, 0.18);
         }
 
-        input::placeholder {
-          color: #9aa4b5;
-          font-size: 15px;
-          font-weight: 400;
-          letter-spacing: 1px;
+        .forgotPassword {
+          margin-top: 9px;
+          text-align: right;
         }
 
-        .fieldHelp {
-          margin: 8px 0 0;
-          color: #718096;
-          font-size: 12px;
+        .forgotPassword a {
+          color: #168554;
+          font-size: 13px;
+          font-weight: 700;
+          text-decoration: none;
         }
 
         button {
@@ -279,6 +358,11 @@ export default async function ServiceAuditsAccessPage({
 
         button:hover {
           background: #46a972;
+        }
+
+        button:disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
         }
 
         .managementAccess {
