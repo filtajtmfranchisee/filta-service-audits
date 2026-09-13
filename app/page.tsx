@@ -6,56 +6,68 @@ export default function HomePage() {
     <main className="page">
       <section className="accessCard">
         <div className="brand">
-          <div className="logoBox">
-           <Image
-  src="/filta-logo-clear.png"
-  alt="Filta"
-  width={300}
-  height={110}
-  className="logo"
-  priority
-/>
-          </div>
+          <Image
+            src="/filta-logo-clear.png"
+            alt="Filta"
+            width={300}
+            height={110}
+            className="logo"
+            priority
+          />
 
-          <p className="eyebrow">DORADO ENVIRONMENTAL</p>
-          <h1>Service Audit System</h1>
+          <p className="eyebrow">
+            DORADO ENVIRONMENTAL
+          </p>
+
+          <h1>
+            Welcome to Dorado&apos;s Audit Site
+          </h1>
 
           <p className="description">
-            Equipment, service-delivery, warehouse and vehicle
-            inspections for Dorado Environmental.
+            Please login for access.
           </p>
         </div>
 
         <div className="accessOptions">
           <article className="option serviceOption">
-            <div className="icon">✓</div>
+            <div className="icon">
+              ✓
+            </div>
 
             <div className="optionContent">
-              <h2>Complete a Service Audit</h2>
+              <h2>
+                Service Audit Login
+              </h2>
 
               <p>
-                Enter the audit-team passcode to begin an inspection.
-                An individual email login is not required.
+                For authorized personnel completing equipment,
+                service-delivery, warehouse and vehicle audits.
+                Enter the audit-team passcode to begin.
               </p>
 
               <Link
                 className="primaryButton"
                 href="/service-audits"
               >
-                Enter Service Audits
+                Service Audit Login
               </Link>
             </div>
           </article>
 
           <article className="option managementOption">
-            <div className="icon">▦</div>
+            <div className="icon">
+              ▦
+            </div>
 
             <div className="optionContent">
-              <h2>Management Access</h2>
+              <h2>
+                Management Login
+              </h2>
 
               <p>
-                Review audit results, produce reports, export data and
-                manage technicians, equipment and locations.
+                For authorized management users accessing audit
+                results, reports, trends, corrective actions and
+                administrative tools based on their assigned role.
               </p>
 
               <Link
@@ -114,21 +126,15 @@ export default function HomePage() {
           color: white;
         }
 
-      
-
-      .logo {
-  display: block;
-  width: auto;
-  max-width: 260px;
-  height: auto;
-  max-height: 100px;
-  margin-bottom: 25px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  object-fit: contain;
-}
+        .logo {
+          display: block;
+          width: auto;
+          max-width: 260px;
+          height: auto;
+          max-height: 100px;
+          margin-bottom: 25px;
+          object-fit: contain;
+        }
 
         .eyebrow {
           margin: 0 0 12px;
@@ -139,17 +145,17 @@ export default function HomePage() {
         }
 
         h1 {
+          max-width: 760px;
           margin: 0;
           font-size: clamp(34px, 6vw, 52px);
-          line-height: 1.05;
+          line-height: 1.08;
         }
 
         .description {
-          max-width: 660px;
           margin: 18px 0 0;
           color: #dbe4ff;
-          font-size: 18px;
-          line-height: 1.55;
+          font-size: 20px;
+          line-height: 1.5;
         }
 
         .accessOptions {
@@ -230,7 +236,8 @@ export default function HomePage() {
           text-decoration: none;
           transition:
             transform 120ms ease,
-            background 120ms ease;
+            background 120ms ease,
+            color 120ms ease;
         }
 
         .primaryButton {
@@ -278,23 +285,10 @@ export default function HomePage() {
             padding: 28px 24px 32px;
           }
 
-          .logoBox {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 25px;
-  padding: 0;
-  background: transparent;
-}
-
-.logo {
-  display: block;
-  width: auto;
-  max-width: 260px;
-  height: auto;
-  max-height: 100px;
-  object-fit: contain;
-}
+          .logo {
+            max-width: 220px;
+            max-height: 85px;
+          }
 
           .accessOptions {
             grid-template-columns: 1fr;
