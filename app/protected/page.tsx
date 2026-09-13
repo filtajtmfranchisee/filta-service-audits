@@ -410,7 +410,7 @@ export default async function ProtectedPage() {
 
                 <div>
                   <h3>
-                    Management
+                    Management (Admin)
                   </h3>
 
                   <p>
@@ -422,7 +422,7 @@ export default async function ProtectedPage() {
                 </div>
 
                 <strong>
-                  Open Management →
+                  Open Admin →
                 </strong>
               </Link>
             )}

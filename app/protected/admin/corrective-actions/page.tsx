@@ -165,7 +165,7 @@ export default async function CorrectiveActionsPage() {
             href="/protected/admin"
             className="text-sm font-semibold text-slate-600 hover:text-slate-900"
           >
-            ← Return to Administration
+            ← Return to Dashboard
           </Link>
           <Link
             href="/protected/audits"
