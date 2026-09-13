@@ -21,7 +21,8 @@ export default function ForgotPasswordPage() {
     setMessage("")
     setErrorMessage("")
 
-    const formData = new FormData(event.currentTarget)
+    const form = event.currentTarget
+    const formData = new FormData(form)
 
     const email = String(
       formData.get("email") || ""
@@ -36,23 +37,41 @@ export default function ForgotPasswordPage() {
         )
       }
 
-      const origin = window.location.origin
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL?.replace(
+          /\/$/,
+          ""
+        ) || window.location.origin
+
+      const redirectTo =
+        `${appUrl}/auth/callback?next=/auth/reset-password`
 
       const { error } =
         await supabase.auth.resetPasswordForEmail(
           email,
           {
-            redirectTo:
-              `${origin}/auth/callback?next=/auth/reset-password`,
+            redirectTo,
           }
         )
 
       if (error) {
+        if (
+          error.message
+            .toLowerCase()
+            .includes("rate limit")
+        ) {
+          throw new Error(
+            "Too many reset requests were sent. Please wait a few minutes and try again."
+          )
+        }
+
         throw error
       }
 
+      form.reset()
+
       setMessage(
-        "If an account exists for that email, a password reset link has been sent. Check your inbox and spam folder."
+        "If an account exists for that email, a password reset link has been sent. Please check your inbox and spam folder."
       )
     } catch (error) {
       setErrorMessage(
@@ -109,14 +128,14 @@ export default function ForgotPasswordPage() {
                 required
                 autoComplete="email"
                 placeholder="name@gofilta.com"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900"
               />
             </label>
 
             <button
               type="submit"
               disabled={sending}
-              className="mt-6 min-h-12 w-full rounded-xl bg-emerald-500 px-6 py-3 font-bold text-white hover:bg-emerald-400 disabled:opacity-50"
+              className="mt-6 min-h-12 w-full rounded-xl bg-emerald-500 px-6 py-3 font-bold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {sending
                 ? "Sending..."
@@ -124,7 +143,7 @@ export default function ForgotPasswordPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-7 text-center">
             <Link
               href="/auth/login"
               className="text-sm font-bold text-emerald-700 hover:text-emerald-600"
