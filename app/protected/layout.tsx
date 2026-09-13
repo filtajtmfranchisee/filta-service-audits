@@ -2,7 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
-import LogoutButton from "@/components/logout-button"
+import { LogoutButton } from "@/components/logout-button"
 
 type ProtectedLayoutProps = {
   children: React.ReactNode
