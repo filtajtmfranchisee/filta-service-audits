@@ -178,7 +178,7 @@ export default function HomePage() {
         }
 
         .loginCard {
-          width: min(540px, 100%);
+          width: min(760px, 100%);
           overflow: hidden;
           border: 1px solid #dbe2ea;
           border-radius: 24px;
@@ -212,7 +212,7 @@ export default function HomePage() {
 
        h1 {
   margin: 0;
-  font-size: clamp(30px, 4vw, 42px);
+  font-size: clamp(30px, 4vw, 40px);
   line-height: 1.1;
   white-space: nowrap;
 }
