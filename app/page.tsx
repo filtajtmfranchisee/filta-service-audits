@@ -210,12 +210,12 @@ export default function HomePage() {
           letter-spacing: 1.6px;
         }
 
-        h1 {
-          margin: 0;
-          font-size: 38px;
-          line-height: 1.08;
-        }
-
+       h1 {
+  margin: 0;
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.1;
+  white-space: nowrap;
+}
         .description {
           margin: 14px 0 0;
           color: #dbe4ff;
@@ -335,8 +335,9 @@ export default function HomePage() {
           }
 
           h1 {
-            font-size: 31px;
-          }
+    font-size: 30px;
+    white-space: normal;
+  }
         }
       `}</style>
     </main>

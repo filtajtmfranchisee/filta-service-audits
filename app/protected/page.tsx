@@ -374,7 +374,7 @@ export default async function ProtectedPage() {
 
             {canViewReports && (
               <Link
-                href="/protected/admin/trends"
+                href="/protected/trends"
                 className="accessCard"
               >
                 <span className="cardIcon">
@@ -429,7 +429,7 @@ export default async function ProtectedPage() {
 
             {canUseAdministration && (
               <Link
-                href="/protected/admin/corrective-actions"
+                href="/protected/corrective-actions"
                 className="accessCard"
               >
                 <span className="cardIcon">
