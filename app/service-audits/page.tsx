@@ -5,14 +5,14 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
-import { createClient } from "@/lib/supabase/client"
-
 export default function ServiceAuditsAccessPage() {
-  const supabase = createClient()
   const router = useRouter()
 
-  const [errorMessage, setErrorMessage] = useState("")
-  const [signingIn, setSigningIn] = useState(false)
+  const [errorMessage, setErrorMessage] =
+    useState("")
+
+  const [signingIn, setSigningIn] =
+    useState(false)
 
   async function handleLogin(
     event: FormEvent<HTMLFormElement>
@@ -22,7 +22,8 @@ export default function ServiceAuditsAccessPage() {
     setSigningIn(true)
     setErrorMessage("")
 
-    const formData = new FormData(event.currentTarget)
+    const formData =
+      new FormData(event.currentTarget)
 
     const email = String(
       formData.get("email") || ""
@@ -41,67 +42,36 @@ export default function ServiceAuditsAccessPage() {
         )
       }
 
-      const { data, error } =
-        await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
+      const response = await fetch(
+        "/api/auth/service-audit-login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password,
+          }),
+        }
+      )
 
-      if (error) {
-        throw error
-      }
+      const result =
+        await response.json()
 
-      if (!data.user) {
+      if (!response.ok) {
         throw new Error(
-          "Unable to verify your account."
+          result.error ||
+            "Unable to sign in."
         )
       }
 
-      const { data: managementUser, error: roleError } =
-        await supabase
-          .from("management_users")
-          .select("role, is_active")
-          .eq("auth_user_id", data.user.id)
-          .maybeSingle()
+      router.push(
+        result.redirect ||
+          "/protected/audits/new"
+      )
 
-      if (roleError) {
-        await supabase.auth.signOut()
-
-        throw new Error(
-          "Your Service Audit access could not be verified."
-        )
-      }
-
-      if (
-        !managementUser ||
-        !managementUser.is_active
-      ) {
-        await supabase.auth.signOut()
-
-        throw new Error(
-          "Your account is not active."
-        )
-      }
-
-      const allowedRoles = [
-        "administrator",
-        "manager",
-        "auditor",
-      ]
-
-      if (
-        !allowedRoles.includes(
-          managementUser.role
-        )
-      ) {
-        await supabase.auth.signOut()
-
-        throw new Error(
-          "Your account does not have Service Audit access."
-        )
-      }
-
-      router.push("/protected/audits/new")
       router.refresh()
     } catch (error) {
       setErrorMessage(
@@ -117,7 +87,10 @@ export default function ServiceAuditsAccessPage() {
   return (
     <main className="page">
       <section className="accessCard">
-        <Link className="backLink" href="/">
+        <Link
+          className="backLink"
+          href="/"
+        >
           ← Return to Main Access
         </Link>
 
@@ -134,11 +107,14 @@ export default function ServiceAuditsAccessPage() {
           DORADO ENVIRONMENTAL
         </p>
 
-        <h1>Service Audit Login</h1>
+        <h1>
+          Service Audit Login
+        </h1>
 
         <p className="description">
           Sign in to begin an equipment,
-          service-delivery, warehouse or vehicle audit.
+          service-delivery, warehouse or
+          vehicle audit.
         </p>
 
         {errorMessage && (
@@ -198,7 +174,9 @@ export default function ServiceAuditsAccessPage() {
         </form>
 
         <div className="managementAccess">
-          <span>Management team?</span>
+          <span>
+            Management team?
+          </span>
 
           <Link href="/auth/login">
             Management Login
@@ -206,7 +184,8 @@ export default function ServiceAuditsAccessPage() {
         </div>
 
         <footer>
-          Authorized Dorado Environmental personnel only
+          Authorized Dorado Environmental
+          personnel only
         </footer>
       </section>
 
@@ -328,7 +307,9 @@ export default function ServiceAuditsAccessPage() {
 
         input:focus {
           border-color: #299665;
-          box-shadow: 0 0 0 4px rgba(87, 187, 131, 0.18);
+          box-shadow:
+            0 0 0 4px
+            rgba(87, 187, 131, 0.18);
         }
 
         .forgotPassword {
